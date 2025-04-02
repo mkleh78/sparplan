@@ -1,754 +1,1012 @@
-import React, { useState, useEffect } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
-
-const COLORS = ['#001d6c', '#e2fe6c', '#253c8a', '#cfdbf7'];
-
-const formatter = new Intl.NumberFormat('de-DE', {
-  style: 'currency',
-  currency: 'EUR',
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 0,
-});
-
-const percentFormatter = new Intl.NumberFormat('de-DE', {
-  style: 'percent',
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
-const ETFSparplanrechner = () => {
-  const [formData, setFormData] = useState({
-    initialInvestment: 10000,
-    monthlyContribution: 500,
-    yearsToInvest: 20,
-    expectedReturnRate: 7,
-    annualFees: 0.2,
-    taxRate: 26.375, // Kapitalertragssteuer + Soli
-    inflationRate: 2,
-  });
-
-  const [chartData, setChartData] = useState([]);
-  const [summary, setSummary] = useState({
-    totalInvestment: 0,
-    totalReturns: 0,
-    totalAfterTax: 0,
-    totalAfterInflation: 0,
-    totalValue: 0,
-  });
-  const [activeTab, setActiveTab] = useState('wachstum');
-  const [compareData, setCompareData] = useState([]);
-  const [showAdvanced, setShowAdvanced] = useState(false);
-
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: parseFloat(value) || 0,
-    });
-  };
-
-  useEffect(() => {
-    calculateInvestment();
-  }, [formData]);
-
-  const calculateInvestment = () => {
-    const {
-      initialInvestment,
-      monthlyContribution,
-      yearsToInvest,
-      expectedReturnRate,
-      annualFees,
-      taxRate,
-      inflationRate,
-    } = formData;
-
-    const months = yearsToInvest * 12;
-    const monthlyRate = (expectedReturnRate - annualFees) / 100 / 12;
-    const inflationMonthlyRate = inflationRate / 100 / 12;
-    
-    let currentValue = initialInvestment;
-    let totalContributions = initialInvestment;
-    let data = [];
-    
-    for (let month = 0; month <= months; month++) {
-      // Calculate values before tax
-      const yearPoint = month / 12;
-      const earned = month > 0 ? currentValue * monthlyRate : 0;
-      currentValue += earned + (month > 0 ? monthlyContribution : 0);
-      
-      if (month > 0) {
-        totalContributions += monthlyContribution;
-      }
-
-      // Calculate taxable earnings
-      const totalEarnings = currentValue - totalContributions;
-      const taxPaid = totalEarnings > 0 ? (totalEarnings * (taxRate / 100)) : 0;
-      const valueAfterTax = currentValue - taxPaid;
-      
-      // Calculate inflation-adjusted value
-      const inflationFactor = Math.pow(1 + inflationMonthlyRate, month);
-      const valueAfterInflation = valueAfterTax / inflationFactor;
-
-      // Only include data points for the beginning of each year or the final month
-      if (month % 12 === 0 || month === months) {
-        data.push({
-          year: Math.floor(yearPoint),
-          month: month,
-          totalContributions: totalContributions,
-          investment: currentValue,
-          returns: totalEarnings,
-          afterTax: valueAfterTax,
-          afterInflation: valueAfterInflation,
-          earned: earned,
-        });
-      }
-    }
-
-    // Generate comparison data for different monthly contributions
-    const comparisonRates = [
-      { label: 'Konservativ (4%)', rate: 4 },
-      { label: 'Moderat (7%)', rate: 7 },
-      { label: 'Optimistisch (10%)', rate: 10 },
-    ];
-    
-    const compareResults = comparisonRates.map(({ label, rate }) => {
-      const monthlyRateComp = (rate - annualFees) / 100 / 12;
-      let valueComp = initialInvestment;
-      let contributionsComp = initialInvestment;
-      
-      for (let month = 1; month <= months; month++) {
-        valueComp += valueComp * monthlyRateComp + monthlyContribution;
-        contributionsComp += monthlyContribution;
-      }
-      
-      return {
-        label,
-        value: valueComp,
-        contributions: contributionsComp,
-        returns: valueComp - contributionsComp
-      };
-    });
-
-    setChartData(data);
-    setCompareData(compareResults);
-    
-    const lastDataPoint = data[data.length - 1];
-    setSummary({
-      totalInvestment: lastDataPoint.totalContributions,
-      totalReturns: lastDataPoint.returns,
-      totalValue: lastDataPoint.investment,
-      totalAfterTax: lastDataPoint.afterTax,
-      totalAfterInflation: lastDataPoint.afterInflation,
-    });
-  };
-
-  const renderTooltipContent = (props) => {
-    const { payload, label } = props;
-    if (payload && payload.length > 0) {
-      return (
-        <div className="bg-white p-4 border border-gray-300 rounded-lg shadow-md">
-          <p className="font-bold mb-2">Jahr {label}</p>
-          {payload.map((entry, index) => {
-            if (entry.dataKey === "totalContributions") {
-              return (
-                <p key={`item-${index}`} style={{ color: entry.color }}>
-                  Einzahlungen: {formatter.format(entry.value)}
-                </p>
-              );
-            } else if (entry.dataKey === "investment") {
-              return (
-                <p key={`item-${index}`} style={{ color: entry.color }}>
-                  Depotwert: {formatter.format(entry.value)}
-                </p>
-              );
-            } else if (entry.dataKey === "afterTax") {
-              return (
-                <p key={`item-${index}`} style={{ color: entry.color }}>
-                  Nach Steuern: {formatter.format(entry.value)}
-                </p>
-              );
-            } else if (entry.dataKey === "afterInflation") {
-              return (
-                <p key={`item-${index}`} style={{ color: entry.color }}>
-                  Kaufkraft: {formatter.format(entry.value)}
-                </p>
-              );
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ETF-Sparplanrechner - vorsorge.berlin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary: #e2fe6c;
+            --primary-dark: #c7e54a;
+            --secondary: #001d6c;
+            --secondary-light: #253c8a;
+            --light: #f5f7fa;
+            --dark: #121212;
+            --gray: #cfdbf7;
+            --gray-light: #edf0f7;
+            --transition: all 0.3s ease;
+            --shadow-sm: 0 2px 8px rgba(0,0,0,0.08);
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.1);
+            --shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
+            --radius-sm: 4px;
+            --radius-md: 8px;
+            --radius-lg: 12px;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            font-size: 16px;
+            color: var(--dark);
+            background-color: var(--light);
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.6s ease forwards;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+            background-color: var(--light);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-lg);
+        }
+        
+        .section-title {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+        
+        .section-title h2 {
+            position: relative;
+            display: inline-block;
+            padding-bottom: 12px;
+            color: var(--secondary);
+            font-size: clamp(1.5rem, 4vw, 2rem);
+            line-height: 1.2;
+            font-weight: 700;
+        }
+        
+        .section-title h2::after {
+            content: '';
+            position: absolute;
+            left: 25%;
+            bottom: 0;
+            width: 50%;
+            height: 4px;
+            background-color: var(--primary);
+            border-radius: 4px;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2.5rem;
+            margin-bottom: 2.5rem;
+        }
+        
+        .card {
+            background-color: white;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-md);
+            padding: 2rem;
+            transition: var(--transition);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-lg);
+        }
+        
+        .card h3 {
+            display: flex;
+            align-items: center;
+            color: var(--secondary);
+            margin-bottom: 1.5rem;
+            font-weight: 700;
+        }
+        
+        .card-icon {
+            width: 40px;
+            height: 40px;
+            background-color: var(--primary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 1rem;
+            font-size: 1.2rem;
+            font-weight: bold;
+            box-shadow: var(--shadow-sm);
+            flex-shrink: 0;
+        }
+        
+        .input-group {
+            margin-bottom: 1.5rem;
+        }
+        
+        .input-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+        
+        .input-wrapper {
+            position: relative;
+        }
+        
+        .input-wrapper span {
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            pointer-events: none;
+            color: #555;
+        }
+        
+        .input-wrapper input[type="number"] {
+            width: 100%;
+            padding: 0.9rem 1rem 0.9rem 2rem;
+            border: 1px solid #ddd;
+            border-radius: var(--radius-md);
+            font-size: 1rem;
+            transition: var(--transition);
+            font-family: inherit;
+        }
+        
+        .input-wrapper input[type="number"]:focus {
+            outline: none;
+            border-color: var(--secondary);
+            box-shadow: 0 0 0 3px rgba(0,29,108,0.1);
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            height: 8px;
+            background-color: var(--gray-light);
+            border-radius: 4px;
+            appearance: none;
+            cursor: pointer;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            background-color: var(--secondary);
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        
+        .range-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.875rem;
+            color: #555;
+            margin-top: 0.5rem;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 0.75rem 1rem;
+            background-color: transparent;
+            border: none;
+            cursor: pointer;
+            color: var(--secondary);
+            font-weight: 500;
+            transition: var(--transition);
+            font-size: 0.9rem;
+            text-decoration: underline;
+            text-align: left;
+            font-family: inherit;
+        }
+        
+        .result-box {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            background-color: var(--primary);
+            border-radius: var(--radius-md);
+            font-weight: 500;
+            margin-bottom: 1.5rem;
+        }
+        
+        .result-box span:last-child {
+            font-size: 1.25rem;
+            font-weight: bold;
+            color: var(--secondary);
+        }
+        
+        .result-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .result-item {
+            padding: 1rem;
+            background-color: var(--gray-light);
+            border-radius: var(--radius-md);
+        }
+        
+        .result-item div:first-child {
+            font-size: 0.875rem;
+            color: #555;
+            margin-bottom: 0.25rem;
+        }
+        
+        .result-item div:last-child {
+            font-weight: bold;
+            color: var(--secondary);
+        }
+        
+        .progress-container {
+            margin-bottom: 1.5rem;
+        }
+        
+        .progress-label {
+            font-size: 0.875rem;
+            color: #555;
+            margin-bottom: 0.5rem;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            background-color: var(--gray-light);
+            border-radius: 99px;
+            height: 10px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            background-color: var(--secondary);
+            height: 100%;
+            border-radius: 99px;
+        }
+        
+        .progress-stats {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: #555;
+            margin-top: 0.5rem;
+        }
+        
+        .key-stats {
+            margin-top: auto;
+            border-top: 1px solid var(--gray-light);
+            padding-top: 1.5rem;
+        }
+        
+        .key-stats h4 {
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--secondary);
+        }
+        
+        .key-stats-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        .key-stat {
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .key-stat span:first-child {
+            color: #555;
+        }
+        
+        .key-stat span:last-child {
+            font-weight: 500;
+        }
+        
+        .tool {
+            background-color: white;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-md);
+            margin-bottom: 1.5rem;
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 1.5rem;
+            border-bottom: 1px solid var(--gray-light);
+            padding: 1.5rem 2rem 0;
+        }
+        
+        .tab {
+            padding: 0.75rem 1rem;
+            background-color: transparent;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 400;
+            color: #555;
+            font-family: inherit;
+            position: relative;
+            transition: var(--transition);
+        }
+        
+        .tab.active {
+            color: var(--secondary);
+            font-weight: 600;
+        }
+        
+        .tab.active::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background-color: var(--primary);
+        }
+        
+        .tab-content {
+            padding: 2rem;
+        }
+        
+        .chart-container {
+            height: 400px;
+            position: relative;
+        }
+        
+        .disclaimer {
+            text-align: center;
+            font-size: 0.875rem;
+            color: #555;
+            margin-top: 2rem;
+        }
+        
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
             }
-            return null;
-          })}
-        </div>
-      );
-    }
-    return null;
-  };
-
-  const renderCompareTooltip = (props) => {
-    const { payload } = props;
-    if (payload && payload.length > 0) {
-      const item = payload[0].payload;
-      return (
-        <div className="bg-white p-4 border border-gray-300 rounded-lg shadow-md">
-          <p className="font-bold mb-2">{item.label}</p>
-          <p>Gesamtwert: {formatter.format(item.value)}</p>
-          <p>Einzahlungen: {formatter.format(item.contributions)}</p>
-          <p>Rendite: {formatter.format(item.returns)}</p>
-        </div>
-      );
-    }
-    return null;
-  };
-
-  const renderBreakdownTooltip = (props) => {
-    const { payload } = props;
-    if (payload && payload.length > 0) {
-      return (
-        <div className="bg-white p-4 border border-gray-300 rounded-lg shadow-md">
-          <p className="font-bold mb-2">{payload[0].name}</p>
-          <p>{formatter.format(payload[0].value)} ({((payload[0].value / summary.totalValue) * 100).toFixed(1)}%)</p>
-        </div>
-      );
-    }
-    return null;
-  };
-
-  const renderGrowthChart = () => (
-    <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-      <h3 className="text-lg font-bold mb-4 text-secondary">Wachstum über {formData.yearsToInvest} Jahre</h3>
-      <ResponsiveContainer width="100%" height={400}>
-        <AreaChart
-          data={chartData}
-          margin={{ top: 10, right: 30, left: 20, bottom: 40 }}
-        >
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis 
-            dataKey="year" 
-            label={{ value: 'Jahre', position: 'insideBottomRight', offset: -10 }} 
-          />
-          <YAxis 
-            tickFormatter={(value) => formatter.format(value)} 
-            label={{ value: 'Wert', angle: -90, position: 'insideLeft' }} 
-          />
-          <Tooltip content={renderTooltipContent} />
-          <Legend />
-          <Area type="monotone" dataKey="investment" name="Depotwert" stackId="1" stroke="#001d6c" fill="#253c8a" fillOpacity={0.8} />
-          <Area type="monotone" dataKey="totalContributions" name="Einzahlungen" stackId="2" stroke="#e2fe6c" fill="#e2fe6c" fillOpacity={0.6} />
-          {showAdvanced && (
-            <>
-              <Area type="monotone" dataKey="afterTax" name="Nach Steuern" stackId="3" stroke="#cfdbf7" fill="#cfdbf7" />
-              <Area type="monotone" dataKey="afterInflation" name="Kaufkraft" stackId="4" stroke="#edf0f7" fill="#edf0f7" />
-            </>
-          )}
-        </AreaChart>
-      </ResponsiveContainer>
-    </div>
-  );
-
-  const renderComparisonChart = () => (
-    <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-      <h3 className="text-lg font-bold mb-4 text-secondary">Vergleich verschiedener Renditen</h3>
-      <ResponsiveContainer width="100%" height={400}>
-        <BarChart
-          data={compareData}
-          margin={{ top: 10, right: 30, left: 20, bottom: 40 }}
-        >
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="label" />
-          <YAxis tickFormatter={(value) => formatter.format(value)} />
-          <Tooltip content={renderCompareTooltip} />
-          <Legend />
-          <Bar dataKey="contributions" name="Einzahlungen" fill="#e2fe6c" />
-          <Bar dataKey="returns" name="Rendite" fill="#001d6c" />
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  );
-
-  const renderBreakdownChart = () => {
-    const data = [
-      { name: 'Einzahlungen', value: summary.totalInvestment },
-      { name: 'Rendite', value: summary.totalReturns },
-    ];
-
-    return (
-      <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-        <h3 className="text-lg font-bold mb-4 text-secondary">Aufteilung nach {formData.yearsToInvest} Jahren</h3>
-        <ResponsiveContainer width="100%" height={400}>
-          <PieChart>
-            <Pie
-              data={data}
-              cx="50%"
-              cy="50%"
-              outerRadius={150}
-              fill="#8884d8"
-              dataKey="value"
-              label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-            >
-              {data.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-              ))}
-            </Pie>
-            <Tooltip content={renderBreakdownTooltip} />
-            <Legend />
-          </PieChart>
-        </ResponsiveContainer>
-      </div>
-    );
-  };
-
-  const renderActiveTab = () => {
-    switch (activeTab) {
-      case 'wachstum':
-        return renderGrowthChart();
-      case 'vergleich':
-        return renderComparisonChart();
-      case 'aufteilung':
-        return renderBreakdownChart();
-      default:
-        return renderGrowthChart();
-    }
-  };
-
-  return (
-    <div className="fade-in" style={{ backgroundColor: '#f5f7fa', borderRadius: '12px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: '2rem', maxWidth: '1200px', margin: '0 auto', fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif" }}>
-      <div className="mb-8">
-        <div className="section-title">
-          <h2 style={{ display: 'inline-block', position: 'relative', color: '#001d6c', fontSize: 'clamp(1.5rem, 4vw, 2rem)', lineHeight: '1.2', fontWeight: '700', paddingBottom: '12px', marginBottom: '3rem', textAlign: 'center' }}>
-            ETF-Sparplanrechner
-            <span style={{ content: "''", position: 'absolute', left: '25%', bottom: '0', width: '50%', height: '4px', backgroundColor: '#e2fe6c', borderRadius: '4px' }}></span>
-          </h2>
+            
+            .result-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .tabs {
+                overflow-x: auto;
+                flex-wrap: nowrap;
+                gap: 0;
+            }
+            
+            .tab {
+                white-space: nowrap;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container fade-in">
+        <div class="section-title">
+            <h2>ETF-Sparplanrechner</h2>
         </div>
         
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2.5rem' }}>
-          <div className="card" style={{ 
-            backgroundColor: 'white', 
-            borderRadius: '12px', 
-            boxShadow: '0 4px 12px rgba(0,0,0,0.1)', 
-            padding: '2rem', 
-            transition: 'all 0.3s ease', 
-            position: 'relative', 
-            display: 'flex', 
-            flexDirection: 'column', 
-            height: '100%' 
-          }}>
-            <h3 style={{ display: 'flex', alignItems: 'center', color: '#001d6c', marginBottom: '1rem' }}>
-              <span style={{ 
-                width: '40px', 
-                height: '40px', 
-                backgroundColor: '#e2fe6c', 
-                borderRadius: '50%', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center', 
-                marginRight: '1rem', 
-                fontSize: '1.2rem', 
-                fontWeight: 'bold', 
-                boxShadow: '0 4px 8px rgba(0,0,0,0.1)', 
-                flexShrink: '0' 
-              }}>E</span>
-              Eingabedaten
-            </h3>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
-                  Anfangsinvestition
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <div style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: '#555' }}>
-                    €
-                  </div>
-                  <input
-                    type="number"
-                    name="initialInvestment"
-                    value={formData.initialInvestment}
-                    onChange={handleInputChange}
-                    style={{ 
-                      width: '100%', 
-                      padding: '0.9rem 1rem 0.9rem 2rem', 
-                      border: '1px solid #ddd', 
-                      borderRadius: '8px', 
-                      fontSize: '1rem', 
-                      transition: 'all 0.3s ease',
-                      fontFamily: 'inherit'
-                    }}
-                  />
-                </div>
-              </div>
-              
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
-                  Monatliche Sparrate
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <div style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: '#555' }}>
-                    €
-                  </div>
-                  <input
-                    type="number"
-                    name="monthlyContribution"
-                    value={formData.monthlyContribution}
-                    onChange={handleInputChange}
-                    style={{ 
-                      width: '100%', 
-                      padding: '0.9rem 1rem 0.9rem 2rem', 
-                      border: '1px solid #ddd', 
-                      borderRadius: '8px', 
-                      fontSize: '1rem', 
-                      transition: 'all 0.3s ease',
-                      fontFamily: 'inherit'
-                    }}
-                  />
-                </div>
-              </div>
-              
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
-                  Anlagezeitraum (Jahre)
-                </label>
-                <input
-                  type="range"
-                  name="yearsToInvest"
-                  min="1"
-                  max="40"
-                  value={formData.yearsToInvest}
-                  onChange={handleInputChange}
-                  style={{ 
-                    width: '100%', 
-                    height: '8px', 
-                    backgroundColor: '#edf0f7', 
-                    borderRadius: '4px', 
-                    appearance: 'none', 
-                    cursor: 'pointer' 
-                  }}
-                />
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', color: '#555', marginTop: '0.5rem' }}>
-                  <span>1</span>
-                  <span>{formData.yearsToInvest}</span>
-                  <span>40</span>
-                </div>
-              </div>
-              
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
-                  Erwartete jährliche Rendite (%)
-                </label>
-                <input
-                  type="range"
-                  name="expectedReturnRate"
-                  min="1"
-                  max="15"
-                  step="0.1"
-                  value={formData.expectedReturnRate}
-                  onChange={handleInputChange}
-                  style={{ 
-                    width: '100%', 
-                    height: '8px', 
-                    backgroundColor: '#edf0f7', 
-                    borderRadius: '4px', 
-                    appearance: 'none', 
-                    cursor: 'pointer' 
-                  }}
-                />
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', color: '#555', marginTop: '0.5rem' }}>
-                  <span>1%</span>
-                  <span>{formData.expectedReturnRate.toFixed(1)}%</span>
-                  <span>15%</span>
-                </div>
-              </div>
-              
-              <button 
-                style={{ 
-                  backgroundColor: 'transparent', 
-                  border: 'none', 
-                  color: '#001d6c', 
-                  fontSize: '0.9rem', 
-                  cursor: 'pointer', 
-                  textAlign: 'left', 
-                  marginTop: '0.5rem',
-                  fontWeight: '500',
-                  padding: '0',
-                  textDecoration: 'underline',
-                  fontFamily: 'inherit'
-                }}
-                onClick={() => setShowAdvanced(!showAdvanced)}
-              >
-                {showAdvanced ? "Erweiterte Optionen ausblenden" : "Erweiterte Optionen anzeigen"}
-              </button>
-              
-              {showAdvanced && (
-                <div style={{ padding: '1.5rem 0 0', borderTop: '1px solid #edf0f7', marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
-                      Jährliche Fondskosten (%)
-                    </label>
-                    <input
-                      type="range"
-                      name="annualFees"
-                      min="0"
-                      max="2"
-                      step="0.05"
-                      value={formData.annualFees}
-                      onChange={handleInputChange}
-                      style={{ 
-                        width: '100%', 
-                        height: '8px', 
-                        backgroundColor: '#edf0f7', 
-                        borderRadius: '4px', 
-                        appearance: 'none', 
-                        cursor: 'pointer' 
-                      }}
-                    />
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', color: '#555', marginTop: '0.5rem' }}>
-                      <span>0%</span>
-                      <span>{formData.annualFees.toFixed(2)}%</span>
-                      <span>2%</span>
+        <div class="grid">
+            <div class="card">
+                <h3><span class="card-icon">E</span>Eingabedaten</h3>
+                
+                <div class="input-group">
+                    <label for="initialInvestment">Anfangsinvestition</label>
+                    <div class="input-wrapper">
+                        <span>€</span>
+                        <input type="number" id="initialInvestment" value="10000">
                     </div>
-                  </div>
-                  
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
-                      Kapitalertragsteuer (%)
-                    </label>
-                    <input
-                      type="range"
-                      name="taxRate"
-                      min="0"
-                      max="30"
-                      step="0.1"
-                      value={formData.taxRate}
-                      onChange={handleInputChange}
-                      style={{ 
-                        width: '100%', 
-                        height: '8px', 
-                        backgroundColor: '#edf0f7', 
-                        borderRadius: '4px', 
-                        appearance: 'none', 
-                        cursor: 'pointer' 
-                      }}
-                    />
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', color: '#555', marginTop: '0.5rem' }}>
-                      <span>0%</span>
-                      <span>{formData.taxRate.toFixed(1)}%</span>
-                      <span>30%</span>
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
-                      Inflationsrate (%)
-                    </label>
-                    <input
-                      type="range"
-                      name="inflationRate"
-                      min="0"
-                      max="5"
-                      step="0.1"
-                      value={formData.inflationRate}
-                      onChange={handleInputChange}
-                      style={{ 
-                        width: '100%', 
-                        height: '8px', 
-                        backgroundColor: '#edf0f7', 
-                        borderRadius: '4px', 
-                        appearance: 'none', 
-                        cursor: 'pointer' 
-                      }}
-                    />
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', color: '#555', marginTop: '0.5rem' }}>
-                      <span>0%</span>
-                      <span>{formData.inflationRate.toFixed(1)}%</span>
-                      <span>5%</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-          
-          <div className="card" style={{ 
-            backgroundColor: 'white', 
-            borderRadius: '12px', 
-            boxShadow: '0 4px 12px rgba(0,0,0,0.1)', 
-            padding: '2rem', 
-            transition: 'all 0.3s ease', 
-            position: 'relative', 
-            display: 'flex', 
-            flexDirection: 'column', 
-            height: '100%' 
-          }}>
-            <h3 style={{ display: 'flex', alignItems: 'center', color: '#001d6c', marginBottom: '1rem' }}>
-              <span style={{ 
-                width: '40px', 
-                height: '40px', 
-                backgroundColor: '#e2fe6c', 
-                borderRadius: '50%', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center', 
-                marginRight: '1rem', 
-                fontSize: '1.2rem', 
-                fontWeight: 'bold', 
-                boxShadow: '0 4px 8px rgba(0,0,0,0.1)', 
-                flexShrink: '0' 
-              }}>R</span>
-              Ergebnisse
-            </h3>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-              <div style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: 'center', 
-                padding: '1rem', 
-                backgroundColor: '#e2fe6c', 
-                borderRadius: '8px',
-                fontWeight: '500'
-              }}>
-                <span>Endwert nach {formData.yearsToInvest} Jahren:</span>
-                <span style={{ 
-                  fontSize: '1.25rem', 
-                  fontWeight: 'bold', 
-                  color: '#001d6c' 
-                }}>{formatter.format(summary.totalValue)}</span>
-              </div>
-              
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
-                <div style={{ padding: '1rem', backgroundColor: '#edf0f7', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '0.875rem', color: '#555', marginBottom: '0.25rem' }}>Gesamte Einzahlungen</div>
-                  <div style={{ fontWeight: 'bold', color: '#001d6c' }}>{formatter.format(summary.totalInvestment)}</div>
-                </div>
-                <div style={{ padding: '1rem', backgroundColor: '#edf0f7', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '0.875rem', color: '#555', marginBottom: '0.25rem' }}>Gewinn</div>
-                  <div style={{ fontWeight: 'bold', color: '#001d6c' }}>{formatter.format(summary.totalReturns)}</div>
                 </div>
                 
-                {showAdvanced && (
-                  <>
-                    <div style={{ padding: '1rem', backgroundColor: '#edf0f7', borderRadius: '8px' }}>
-                      <div style={{ fontSize: '0.875rem', color: '#555', marginBottom: '0.25rem' }}>Nach Steuern</div>
-                      <div style={{ fontWeight: 'bold', color: '#001d6c' }}>{formatter.format(summary.totalAfterTax)}</div>
+                <div class="input-group">
+                    <label for="monthlyContribution">Monatliche Sparrate</label>
+                    <div class="input-wrapper">
+                        <span>€</span>
+                        <input type="number" id="monthlyContribution" value="500">
                     </div>
-                    <div style={{ padding: '1rem', backgroundColor: '#edf0f7', borderRadius: '8px' }}>
-                      <div style={{ fontSize: '0.875rem', color: '#555', marginBottom: '0.25rem' }}>Reale Kaufkraft</div>
-                      <div style={{ fontWeight: 'bold', color: '#001d6c' }}>{formatter.format(summary.totalAfterInflation)}</div>
+                </div>
+                
+                <div class="input-group">
+                    <label for="yearsToInvest">Anlagezeitraum (Jahre)</label>
+                    <input type="range" id="yearsToInvest" min="1" max="40" value="20">
+                    <div class="range-labels">
+                        <span>1</span>
+                        <span id="yearsToInvestValue">20</span>
+                        <span>40</span>
                     </div>
-                  </>
-                )}
-              </div>
-              
-              <div>
-                <div style={{ fontSize: '0.875rem', color: '#555', marginBottom: '0.5rem' }}>Verhältnis Gewinn zu Einzahlungen</div>
-                <div style={{ width: '100%', backgroundColor: '#edf0f7', borderRadius: '99px', height: '10px', overflow: 'hidden' }}>
-                  <div 
-                    style={{ 
-                      backgroundColor: '#001d6c', 
-                      height: '100%', 
-                      borderRadius: '99px',
-                      width: `${(summary.totalReturns / summary.totalValue) * 100}%` 
-                    }}
-                  ></div>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#555', marginTop: '0.5rem' }}>
-                  <span>Einzahlungen: {((summary.totalInvestment / summary.totalValue) * 100).toFixed(0)}%</span>
-                  <span>Gewinn: {((summary.totalReturns / summary.totalValue) * 100).toFixed(0)}%</span>
+                
+                <div class="input-group">
+                    <label for="expectedReturnRate">Erwartete jährliche Rendite (%)</label>
+                    <input type="range" id="expectedReturnRate" min="1" max="15" step="0.1" value="7">
+                    <div class="range-labels">
+                        <span>1%</span>
+                        <span id="expectedReturnRateValue">7.0%</span>
+                        <span>15%</span>
+                    </div>
                 </div>
-              </div>
-              
-              <div style={{ marginTop: 'auto', borderTop: '1px solid #edf0f7', paddingTop: '1.5rem' }}>
-                <h4 style={{ fontWeight: '600', marginBottom: '1rem', color: '#001d6c' }}>Schlüsselzahlen</h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#555' }}>Jährliche Rendite:</span>
-                    <span style={{ fontWeight: '500' }}>{formData.expectedReturnRate}%</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#555' }}>Monatliche Einzahlung:</span>
-                    <span style={{ fontWeight: '500' }}>{formatter.format(formData.monthlyContribution)}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#555' }}>Rendite nach {formData.yearsToInvest} Jahren:</span>
-                    <span style={{ fontWeight: '500' }}>{percentFormatter.format(summary.totalReturns / summary.totalInvestment)}</span>
-                  </div>
+                
+                <button id="advancedToggle" class="btn">Erweiterte Optionen anzeigen</button>
+                
+                <div id="advancedOptions" style="display: none; margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--gray-light);">
+                    <div class="input-group">
+                        <label for="annualFees">Jährliche Fondskosten (%)</label>
+                        <input type="range" id="annualFees" min="0" max="2" step="0.05" value="0.2">
+                        <div class="range-labels">
+                            <span>0%</span>
+                            <span id="annualFeesValue">0.20%</span>
+                            <span>2%</span>
+                        </div>
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="taxRate">Kapitalertragsteuer (%)</label>
+                        <input type="range" id="taxRate" min="0" max="30" step="0.1" value="26.375">
+                        <div class="range-labels">
+                            <span>0%</span>
+                            <span id="taxRateValue">26.4%</span>
+                            <span>30%</span>
+                        </div>
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="inflationRate">Inflationsrate (%)</label>
+                        <input type="range" id="inflationRate" min="0" max="5" step="0.1" value="2">
+                        <div class="range-labels">
+                            <span>0%</span>
+                            <span id="inflationRateValue">2.0%</span>
+                            <span>5%</span>
+                        </div>
+                    </div>
                 </div>
-              </div>
             </div>
-          </div>
-        </div>
-      </div>
-      
-      <div className="tool" style={{ 
-        backgroundColor: 'white', 
-        borderRadius: '12px', 
-        padding: '1.5rem 2rem', 
-        boxShadow: '0 4px 12px rgba(0,0,0,0.1)', 
-        transition: 'all 0.3s ease',
-        marginBottom: '1.5rem'
-      }}>
-        <div style={{ borderBottom: '1px solid #edf0f7', marginBottom: '1.5rem' }}>
-          <div style={{ display: 'flex', gap: '1.5rem' }}>
-            <button
-              style={{ 
-                padding: '0.75rem 1rem', 
-                backgroundColor: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                color: activeTab === 'wachstum' ? '#001d6c' : '#555',
-                fontWeight: activeTab === 'wachstum' ? '600' : '400',
-                borderBottom: activeTab === 'wachstum' ? '2px solid #e2fe6c' : 'none',
-                transition: 'all 0.3s ease',
-                fontSize: '1rem',
-                fontFamily: 'inherit'
-              }}
-              onClick={() => setActiveTab('wachstum')}
-            >
-              Wachstumskurve
-            </button>
-            <button
-              style={{ 
-                padding: '0.75rem 1rem', 
-                backgroundColor: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                color: activeTab === 'vergleich' ? '#001d6c' : '#555',
-                fontWeight: activeTab === 'vergleich' ? '600' : '400',
-                borderBottom: activeTab === 'vergleich' ? '2px solid #e2fe6c' : 'none',
-                transition: 'all 0.3s ease',
-                fontSize: '1rem',
-                fontFamily: 'inherit'
-              }}
-              onClick={() => setActiveTab('vergleich')}
-            >
-              Rendite-Vergleich
-            </button>
-            <button
-              style={{ 
-                padding: '0.75rem 1rem', 
-                backgroundColor: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                color: activeTab === 'aufteilung' ? '#001d6c' : '#555',
-                fontWeight: activeTab === 'aufteilung' ? '600' : '400',
-                borderBottom: activeTab === 'aufteilung' ? '2px solid #e2fe6c' : 'none',
-                transition: 'all 0.3s ease',
-                fontSize: '1rem',
-                fontFamily: 'inherit'
-              }}
-              onClick={() => setActiveTab('aufteilung')}
-            >
-              Aufteilung
-            </button>
-          </div>
+            
+            <div class="card">
+                <h3><span class="card-icon">R</span>Ergebnisse</h3>
+                
+                <div class="result-box">
+                    <span>Endwert nach <span id="resultYears">20</span> Jahren:</span>
+                    <span id="totalValue">€ 0</span>
+                </div>
+                
+                <div class="result-grid">
+                    <div class="result-item">
+                        <div>Gesamte Einzahlungen</div>
+                        <div id="totalInvestment">€ 0</div>
+                    </div>
+                    <div class="result-item">
+                        <div>Gewinn</div>
+                        <div id="totalReturns">€ 0</div>
+                    </div>
+                    
+                    <div id="advancedResults" style="display: none; grid-column: span 2;">
+                        <div class="result-grid" style="margin-bottom: 0;">
+                            <div class="result-item">
+                                <div>Nach Steuern</div>
+                                <div id="totalAfterTax">€ 0</div>
+                            </div>
+                            <div class="result-item">
+                                <div>Reale Kaufkraft</div>
+                                <div id="totalAfterInflation">€ 0</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="progress-container">
+                    <div class="progress-label">Verhältnis Gewinn zu Einzahlungen</div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                    </div>
+                    <div class="progress-stats">
+                        <span>Einzahlungen: <span id="investmentPercentage">0%</span></span>
+                        <span>Gewinn: <span id="returnsPercentage">0%</span></span>
+                    </div>
+                </div>
+                
+                <div class="key-stats">
+                    <h4>Schlüsselzahlen</h4>
+                    <div class="key-stats-grid">
+                        <div class="key-stat">
+                            <span>Jährliche Rendite:</span>
+                            <span id="keyReturnRate">7.0%</span>
+                        </div>
+                        <div class="key-stat">
+                            <span>Monatliche Einzahlung:</span>
+                            <span id="keyMonthlyContribution">€ 500</span>
+                        </div>
+                        <div class="key-stat">
+                            <span>Rendite nach <span id="keyResultYears">20</span> Jahren:</span>
+                            <span id="keyTotalReturn">0%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
         
-        {renderActiveTab()}
-      </div>
-      
-      <div style={{ textAlign: 'center', fontSize: '0.875rem', color: '#555', marginTop: '2rem' }}>
-        <p>Hinweis: Diese Berechnungen dienen nur zu Informationszwecken und stellen keine Anlageberatung dar. 
-        Die tatsächlichen Ergebnisse können aufgrund von Marktschwankungen, Steueränderungen und anderen Faktoren abweichen.</p>
-      </div>
+        <div class="tool">
+            <div class="tabs">
+                <button class="tab active" data-tab="growth">Wachstumskurve</button>
+                <button class="tab" data-tab="comparison">Rendite-Vergleich</button>
+                <button class="tab" data-tab="breakdown">Aufteilung</button>
+            </div>
+            <div class="tab-content">
+                <div id="growth-chart" class="chart-container">
+                    <canvas id="growthChart"></canvas>
+                </div>
+                <div id="comparison-chart" class="chart-container" style="display: none;">
+                    <canvas id="comparisonChart"></canvas>
+                </div>
+                <div id="breakdown-chart" class="chart-container" style="display: none;">
+                    <canvas id="breakdownChart"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <div class="disclaimer">
+            <p>Hinweis: Diese Berechnungen dienen nur zu Informationszwecken und stellen keine Anlageberatung dar. 
+            Die tatsächlichen Ergebnisse können aufgrund von Marktschwankungen, Steueränderungen und anderen Faktoren abweichen.</p>
+        </div>
     </div>
-  );
-};
 
-export default ETFSparplanrechner;
+    <script>
+        // DOM Elements
+        const initialInvestmentInput = document.getElementById('initialInvestment');
+        const monthlyContributionInput = document.getElementById('monthlyContribution');
+        const yearsToInvestInput = document.getElementById('yearsToInvest');
+        const expectedReturnRateInput = document.getElementById('expectedReturnRate');
+        const annualFeesInput = document.getElementById('annualFees');
+        const taxRateInput = document.getElementById('taxRate');
+        const inflationRateInput = document.getElementById('inflationRate');
+        
+        const yearsToInvestValue = document.getElementById('yearsToInvestValue');
+        const expectedReturnRateValue = document.getElementById('expectedReturnRateValue');
+        const annualFeesValue = document.getElementById('annualFeesValue');
+        const taxRateValue = document.getElementById('taxRateValue');
+        const inflationRateValue = document.getElementById('inflationRateValue');
+        
+        const advancedToggle = document.getElementById('advancedToggle');
+        const advancedOptions = document.getElementById('advancedOptions');
+        const advancedResults = document.getElementById('advancedResults');
+        
+        const totalValueElement = document.getElementById('totalValue');
+        const totalInvestmentElement = document.getElementById('totalInvestment');
+        const totalReturnsElement = document.getElementById('totalReturns');
+        const totalAfterTaxElement = document.getElementById('totalAfterTax');
+        const totalAfterInflationElement = document.getElementById('totalAfterInflation');
+        
+        const resultYearsElements = document.querySelectorAll('#resultYears, #keyResultYears');
+        const progressFill = document.getElementById('progressFill');
+        const investmentPercentage = document.getElementById('investmentPercentage');
+        const returnsPercentage = document.getElementById('returnsPercentage');
+        
+        const keyReturnRate = document.getElementById('keyReturnRate');
+        const keyMonthlyContribution = document.getElementById('keyMonthlyContribution');
+        const keyTotalReturn = document.getElementById('keyTotalReturn');
+        
+        const tabs = document.querySelectorAll('.tab');
+        const chartContainers = document.querySelectorAll('.chart-container');
+        
+        let growthChart, comparisonChart, breakdownChart;
+        let showAdvanced = false;
+        
+        // Formatter for currency
+        const formatter = new Intl.NumberFormat('de-DE', {
+            style: 'currency',
+            currency: 'EUR',
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0
+        });
+        
+        // Formatter for percentages
+        const percentFormatter = new Intl.NumberFormat('de-DE', {
+            style: 'percent',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+        
+        // Chart colors
+        const chartColors = {
+            primary: '#e2fe6c',
+            secondary: '#001d6c',
+            secondaryLight: '#253c8a',
+            gray: '#cfdbf7',
+            grayLight: '#edf0f7'
+        };
+        
+        // Initialize
+        function initialize() {
+            // Set initial values
+            updateRangeLabels();
+            
+            // Initialize charts
+            initializeCharts();
+            
+            // Calculate initial results
+            calculateInvestment();
+            
+            // Add event listeners
+            addEventListeners();
+        }
+        
+        // Update range label values
+        function updateRangeLabels() {
+            yearsToInvestValue.textContent = yearsToInvestInput.value;
+            expectedReturnRateValue.textContent = parseFloat(expectedReturnRateInput.value).toFixed(1) + '%';
+            annualFeesValue.textContent = parseFloat(annualFeesInput.value).toFixed(2) + '%';
+            taxRateValue.textContent = parseFloat(taxRateInput.value).toFixed(1) + '%';
+            inflationRateValue.textContent = parseFloat(inflationRateInput.value).toFixed(1) + '%';
+        }
+        
+        // Main calculation function
+        function calculateInvestment() {
+            const initialInvestment = parseFloat(initialInvestmentInput.value) || 0;
+            const monthlyContribution = parseFloat(monthlyContributionInput.value) || 0;
+            const yearsToInvest = parseInt(yearsToInvestInput.value) || 0;
+            const expectedReturnRate = parseFloat(expectedReturnRateInput.value) || 0;
+            const annualFees = parseFloat(annualFeesInput.value) || 0;
+            const taxRate = parseFloat(taxRateInput.value) || 0;
+            const inflationRate = parseFloat(inflationRateInput.value) || 0;
+            
+            const months = yearsToInvest * 12;
+            const monthlyRate = (expectedReturnRate - annualFees) / 100 / 12;
+            const inflationMonthlyRate = inflationRate / 100 / 12;
+            
+            let currentValue = initialInvestment;
+            let totalContributions = initialInvestment;
+            let chartData = [];
+            
+            for (let month = 0; month <= months; month++) {
+                // Calculate values before tax
+                const yearPoint = month / 12;
+                const earned = month > 0 ? currentValue * monthlyRate : 0;
+                currentValue += earned + (month > 0 ? monthlyContribution : 0);
+                
+                if (month > 0) {
+                    totalContributions += monthlyContribution;
+                }
+                
+                // Calculate taxable earnings
+                const totalEarnings = currentValue - totalContributions;
+                const taxPaid = totalEarnings > 0 ? (totalEarnings * (taxRate / 100)) : 0;
+                const valueAfterTax = currentValue - taxPaid;
+                
+                // Calculate inflation-adjusted value
+                const inflationFactor = Math.pow(1 + inflationMonthlyRate, month);
+                const valueAfterInflation = valueAfterTax / inflationFactor;
+                
+                // Only include data points for the beginning of each year or the final month
+                if (month % 12 === 0 || month === months) {
+                    chartData.push({
+                        year: Math.floor(yearPoint),
+                        month: month,
+                        totalContributions: totalContributions,
+                        investment: currentValue,
+                        returns: totalEarnings,
+                        afterTax: valueAfterTax,
+                        afterInflation: valueAfterInflation,
+                        earned: earned
+                    });
+                }
+            }
+            
+            // Generate comparison data for different monthly contributions
+            const comparisonRates = [
+                { label: 'Konservativ (4%)', rate: 4 },
+                { label: 'Moderat (7%)', rate: 7 },
+                { label: 'Optimistisch (10%)', rate: 10 }
+            ];
+            
+            const compareResults = comparisonRates.map(({ label, rate }) => {
+                const monthlyRateComp = (rate - annualFees) / 100 / 12;
+                let valueComp = initialInvestment;
+                let contributionsComp = initialInvestment;
+                
+                for (let month = 1; month <= months; month++) {
+                    valueComp += valueComp * monthlyRateComp + monthlyContribution;
+                    contributionsComp += monthlyContribution;
+                }
+                
+                return {
+                    label,
+                    value: valueComp,
+                    contributions: contributionsComp,
+                    returns: valueComp - contributionsComp
+                };
+            });
+            
+            // Update UI with results
+            const lastDataPoint = chartData[chartData.length - 1];
+            updateResults(lastDataPoint);
+            
+            // Update charts
+            updateCharts(chartData, compareResults);
+        }
+        
+        // Update UI with calculation results
+        function updateResults(data) {
+            // Update basic results
+            totalValueElement.textContent = formatter.format(data.investment);
+            totalInvestmentElement.textContent = formatter.format(data.totalContributions);
+            totalReturnsElement.textContent = formatter.format(data.returns);
+            
+            // Update advanced results if enabled
+            if (showAdvanced) {
+                totalAfterTaxElement.textContent = formatter.format(data.afterTax);
+                totalAfterInflationElement.textContent = formatter.format(data.afterInflation);
+            }
+            
+            // Update years in results
+            resultYearsElements.forEach(el => {
+                el.textContent = yearsToInvestInput.value;
+            });
+            
+            // Update progress bar
+            const investmentPercent = (data.totalContributions / data.investment * 100).toFixed(0);
+            const returnsPercent = (data.returns / data.investment * 100).toFixed(0);
+            
+            progressFill.style.width = returnsPercent + '%';
+            investmentPercentage.textContent = investmentPercent + '%';
+            returnsPercentage.textContent = returnsPercent + '%';
+            
+            // Update key stats
+            keyReturnRate.textContent = expectedReturnRateInput.value + '%';
+            keyMonthlyContribution.textContent = formatter.format(parseFloat(monthlyContributionInput.value));
+            keyTotalReturn.textContent = percentFormatter.format(data.returns / data.totalContributions);
+        }
+        
+        // Initialize the charts
+        function initializeCharts() {
+            // Growth Chart
+            const growthCtx = document.getElementById('growthChart').getContext('2d');
+            growthChart = new Chart(growthCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'Depotwert',
+                            backgroundColor: 'rgba(0, 29, 108, 0.2)',
+                            borderColor: '#001d6c',
+                            borderWidth: 2,
+                            data: [],
+                            fill: true
+                        },
+                        {
+                            label: 'Einzahlungen',
+                            backgroundColor: 'rgba(226, 254, 108, 0.2)',
+                            borderColor: '#e2fe6c',
+                            borderWidth: 2,
+                            data: [],
+                            fill: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: value => formatter.format(value)
+                            },
+                            title: {
+                                display: true,
+                                text: 'Wert'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Jahre'
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Comparison Chart
+            const comparisonCtx = document.getElementById('comparisonChart').getContext('2d');
+            comparisonChart = new Chart(comparisonCtx, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'Einzahlungen',
+                            backgroundColor: '#e2fe6c',
+                            data: []
+                        },
+                        {
+                            label: 'Rendite',
+                            backgroundColor: '#001d6c',
+                            data: []
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: value => formatter.format(value)
+                            }
+                        },
+                        x: {
+                            stacked: false
+                        }
+                    }
+                }
+            });
+            
+            // Breakdown Chart
+            const breakdownCtx = document.getElementById('breakdownChart').getContext('2d');
+            breakdownChart = new Chart(breakdownCtx, {
+                type: 'pie',
+                data: {
+                    labels: ['Einzahlungen', 'Rendite'],
+                    datasets: [{
+                        data: [1, 1],
+                        backgroundColor: ['#e2fe6c', '#001d6c']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const value = context.raw;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = ((value / total) * 100).toFixed(1);
+                                    return `${context.label}: ${formatter.format(value)} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Update charts with new data
+        function updateCharts(chartData, compareResults) {
+            // Update Growth Chart
+            const years = chartData.map(item => item.year);
+            const investments = chartData.map(item => item.investment);
+            const contributions = chartData.map(item => item.totalContributions);
+            const afterTax = chartData.map(item => item.afterTax);
+            const afterInflation = chartData.map(item => item.afterInflation);
+            
+            growthChart.data.labels = years;
+            growthChart.data.datasets[0].data = investments;
+            growthChart.data.datasets[1].data = contributions;
+            
+            if (showAdvanced) {
+                if (growthChart.data.datasets.length === 2) {
+                    // Add the new datasets if they don't exist
+                    growthChart.data.datasets.push({
+                        label: 'Nach Steuern',
+                        backgroundColor: 'rgba(207, 219, 247, 0.2)',
+                        borderColor: '#cfdbf7',
+                        borderWidth: 2,
+                        data: afterTax,
+                        fill: true
+                    });
+                    
+                    growthChart.data.datasets.push({
+                        label: 'Kaufkraft',
+                        backgroundColor: 'rgba(237, 240, 247, 0.2)',
+                        borderColor: '#edf0f7',
+                        borderWidth: 2,
+                        data: afterInflation,
+                        fill: true
+                    });
+                } else {
+                    // Update the existing datasets
+                    growthChart.data.datasets[2].data = afterTax;
+                    growthChart.data.datasets[3].data = afterInflation;
+                }
+            } else if (growthChart.data.datasets.length > 2) {
+                // Remove the advanced datasets if they exist
+                growthChart.data.datasets.splice(2, 2);
+            }
+            
+            growthChart.update();
+            
+            // Update Comparison Chart
+            const labels = compareResults.map(item => item.label);
+            const contribValues = compareResults.map(item => item.contributions);
+            const returnValues = compareResults.map(item => item.returns);
+            
+            comparisonChart.data.labels = labels;
+            comparisonChart.data.datasets[0].data = contribValues;
+            comparisonChart.data.datasets[1].data = returnValues;
+            comparisonChart.update();
+            
+            // Update Breakdown Chart
+            const lastDataPoint = chartData[chartData.length - 1];
+            breakdownChart.data.datasets[0].data = [
+                lastDataPoint.totalContributions,
+                lastDataPoint.returns
+            ];
+            breakdownChart.update();
+        }
+        
+        // Add event listeners
+        function addEventListeners() {
+            // Input changes
+            const inputElements = [
+                initialInvestmentInput,
+                monthlyContributionInput,
+                yearsToInvestInput,
+                expectedReturnRateInput,
+                annualFeesInput,
+                taxRateInput,
+                inflationRateInput
+            ];
+            
+            inputElements.forEach(input => {
+                input.addEventListener('input', () => {
+                    updateRangeLabels();
+                    calculateInvestment();
+                });
+            });
+            
+            // Toggle advanced options
+            advancedToggle.addEventListener('click', () => {
+                showAdvanced = !showAdvanced;
+                
+                advancedOptions.style.display = showAdvanced ? 'block' : 'none';
+                advancedResults.style.display = showAdvanced ? 'block' : 'none';
+                advancedToggle.textContent = showAdvanced ? 'Erweiterte Optionen ausblenden' : 'Erweiterte Optionen anzeigen';
+                
+                calculateInvestment();
+            });
+            
+            // Tab switching
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    // Deactivate all tabs
+                    tabs.forEach(t => t.classList.remove('active'));
+                    
+                    // Hide all chart containers
+                    chartContainers.forEach(container => {
+                        container.style.display = 'none';
+                    });
+                    
+                    // Activate clicked tab
+                    tab.classList.add('active');
+                    
+                    // Show corresponding chart
+                    const tabName = tab.getAttribute('data-tab');
+                    document.getElementById(`${tabName}-chart`).style.display = 'block';
+                });
+            });
+        }
+        
+        // Run initialization when the DOM is loaded
+        document.addEventListener('DOMContentLoaded', initialize);
+    </script>
+</body>
+</html>
